@@ -33,6 +33,16 @@
         
         /* Style pour la popup d'erreur personnalisée */
         .error-popup { background: #fee2e2; border: 1px solid #fca5a5; color: #dc2626; padding: 1rem; border-radius: 0.5rem; }
+
+        /* Animation pour la corbeille */
+        @keyframes trash-shake {
+            0%, 100% { transform: rotate(0deg); }
+            10%, 30%, 50%, 70%, 90% { transform: rotate(5deg); }
+            20%, 40%, 60%, 80% { transform: rotate(-5deg); }
+        }
+        .animate-trash:hover svg {
+            animation: trash-shake 0.5s ease-in-out;
+        }
     </style>
 </head>
 <body oncontextmenu="return false;">
@@ -62,6 +72,16 @@
 
         const { useState, useEffect, useCallback } = React;
         const { jsPDF } = window.jspdf;
+
+        // --- MAPPAGE DES STATUTS ---
+        const StatusMap = {
+            Pending: { label: "En attente", color: "orange" },
+            Envoyé: { label: "Envoyé", color: "blue" },
+            Reflection: { label: "En réflexion", color: "yellow" },
+            Signed: { label: "Signé", color: "green" },
+            Abandoned: { label: "Abandonné", color: "slate" },
+            RequestDelete: { label: "Demande Suppr.", color: "red" }
+        };
 
         const Icon = ({ name, size = 20, className }) => {
             const icons = {
@@ -136,8 +156,9 @@
             doc.setTextColor(200, 200, 200);
             
             const refString = orderData.reference || "N/A";
+            const dateToDisplay = orderData.createdAt && orderData.createdAt.seconds ? orderData.createdAt.seconds * 1000 : (orderData.createdAt || new Date());
             doc.text(`RÉF: ${refString}`, 200, 35, { align: "right" });
-            doc.text(`Date: ${new Date(orderData.createdAt.seconds ? orderData.createdAt.seconds * 1000 : orderData.createdAt).toLocaleDateString('fr-FR')}`, 200, 40, { align: "right" });
+            doc.text(`Date: ${new Date(dateToDisplay).toLocaleDateString('fr-FR')}`, 200, 40, { align: "right" });
 
             doc.setFillColor(255, 255, 255);
             doc.roundedRect(145, 55, 55, 10, 1, 1, 'F');
@@ -300,7 +321,7 @@
             return formatted.substring(0, 14); // Limite à 10 chiffres + 4 espaces
         };
 
-        // --- MODALE DE SUCCÈS POUR LE PDF ---
+        // --- MODALE DE SUCCÈS POUR LE PDF (Inchangé) ---
         const SuccessModal = ({ isOpen, onClose, reference, isEditing }) => {
             if (!isOpen) return null;
 
@@ -311,7 +332,7 @@
                     ),
                     React.createElement('h3', { className: "text-xl font-bold text-slate-800 mb-2" }, isEditing ? "Mise à jour réussie !" : "Commande générée !"),
                     React.createElement('p', { className: "text-slate-600 mb-6" },
-                        `Le PDF de l'ordre de commande ${reference} a été ${isEditing ? 'mis à jour et téléchargé' : 'généré et téléchargé'} avec succès. Le statut est désormais : En attente.`
+                        `Le PDF de l'ordre de commande ${reference} a été ${isEditing ? 'mis à jour et téléchargé' : 'généré et téléchargé'} avec succès. Le statut est désormais : ${isEditing ? 'En attente' : 'En attente'}.`
                     ),
                     React.createElement('button', {
                         onClick: onClose,
@@ -325,6 +346,7 @@
         // --- COMPONENTS ---
 
         function Login({ onLogin }) {
+            // ... (Inchangé)
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [showPassword, setShowPassword] = useState(false);
@@ -389,10 +411,10 @@
             );
         }
 
-        // --- DASHBOARD LAYOUT (Inchangé) ---
+        // --- DASHBOARD LAYOUT ---
         function DashboardLayout({ user, userData, globalSettings, db, isAdmin, setView, currentOrder, setCurrentOrder, allSalesReps }) {
             const [currentModule, setCurrentModule] = useState('generator');
-            const [showSuccessModal, setShowSuccessModal] = useState(null); // { reference: string, isEditing: boolean }
+            const [showSuccessModal, setShowSuccessModal] = useState(null);
 
             const allMenuItems = [
                 { id: 'generator', label: 'Générateur', icon: 'layout' },
@@ -402,7 +424,6 @@
 
             const menuItems = allMenuItems;
             
-            // Fonction utilitaire pour afficher le rôle proprement
             const getRoleLabel = (role) => {
                 if (role === 'admin') return 'ADMINISTRATEUR';
                 if (role === 'intern') return 'STAGIAIRE';
@@ -438,6 +459,15 @@
                         return React.createElement(CommercialProfileModule, { user, userData, db });
                     default:
                         return React.createElement(FormPanel, { user, userData, globalSettings, db, isAdmin, setCurrentModule, currentOrder, setCurrentOrder, setShowSuccessModal });
+                }
+            };
+            
+            // Fonction pour naviguer vers l'admin (onglet Corbeille)
+            const goToAdminTrash = () => {
+                if(isAdmin) {
+                    setView('admin', 'trash'); 
+                } else {
+                    alert("Accès refusé.");
                 }
             };
 
@@ -478,10 +508,20 @@
                         )
                     ),
                     React.createElement('div', { className: "p-4 border-t border-slate-800 space-y-2" },
+                        // NOUVEL ONGLET CORBEILLE DANS LE DASHBOARD POUR L'ADMIN
                         isAdmin && React.createElement('button', {
-                            onClick: () => setView('admin'),
-                            className: "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-yellow-400 transition"
-                        }, React.createElement(Icon, { name: "settings", size: 20 }), "Administration"),
+                            onClick: goToAdminTrash,
+                            className: "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-red-400 transition"
+                        }, React.createElement(Icon, { name: "trash", size: 20 }), "Corbeille (Demandes Suppr.)"),
+                        
+                        // BOUTON ADMINISTRATION PRINCIPAL
+                        isAdmin && React.createElement('button', {
+                            onClick: () => setView('admin', 'orders'),
+                            className: "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-yellow-400 transition relative"
+                        }, 
+                            React.createElement(Icon, { name: "settings", size: 20 }), 
+                            "Administration"
+                        ),
                             
                         React.createElement('button', {
                             onClick: () => signOut(auth),
@@ -508,7 +548,8 @@
                         ),
 
                         React.createElement('div', { className: "flex gap-4" },
-                            isAdmin && React.createElement('button', { onClick: () => setView('admin'), className: "text-slate-600" }, React.createElement(Icon, { name: "settings" })),
+                            isAdmin && React.createElement('button', { onClick: goToAdminTrash, className: "text-slate-600" }, React.createElement(Icon, { name: "trash" })),
+                            isAdmin && React.createElement('button', { onClick: () => setView('admin', 'orders'), className: "text-slate-600" }, React.createElement(Icon, { name: "settings" })),
                             React.createElement('button', { onClick: () => signOut(auth), className: "text-red-500" }, React.createElement(Icon, { name: "power" }))
                         )
                     ),
@@ -550,6 +591,17 @@
             const [deleteModal, setDeleteModal] = useState(null);
             const [selectedRepId, setSelectedRepId] = useState('Me');
             const [confirmDeleteModal, setConfirmDeleteModal] = useState(null);
+            const [salesRepsMap, setSalesRepsMap] = useState({});
+
+            useEffect(() => {
+                if (allSalesReps) {
+                    const map = {};
+                    allSalesReps.forEach(rep => {
+                        map[rep.id] = rep.name;
+                    });
+                    setSalesRepsMap(map);
+                }
+            }, [allSalesReps]);
 
 
             // --- LOGIQUE DE FILTRAGE DES COMMANDES ---
@@ -595,7 +647,6 @@
             // --- FIN LOGIQUE DE FILTRAGE ---
 
 
-            // Fonction de suppression IMMÉDIATE (Admin)
             const instantDeleteOrder = async (orderId, orderRef) => {
                 try {
                     await deleteDoc(doc(db, "orders", orderId));
@@ -608,7 +659,6 @@
                 }
             };
 
-            // Fonction de suppression IMMÉDIATE avec confirmation personnalisée
             const AdminDeleteConfirmationModal = () => {
                 if (!confirmDeleteModal) return null;
                 const { id, ref } = confirmDeleteModal;
@@ -635,30 +685,35 @@
                 );
             };
             
-            // Gestion visuelle des statuts (Couleur du select)
+            // Gestion visuelle des statuts (Mise à jour pour les nouveaux statuts)
             const getStatusColorClass = (status) => {
-                switch(status) {
-                    case 'Pending': return "bg-orange-50 text-orange-800 border-orange-200";
-                    case 'Generated': return "bg-blue-50 text-blue-800 border-blue-200";
-                    case 'Reflection': return "bg-yellow-50 text-yellow-800 border-yellow-200";
-                    case 'Signed': return "bg-green-50 text-green-800 border-green-200";
-                    case 'Abandoned': return "bg-slate-100 text-slate-500 border-slate-200";
-                    case 'RequestDelete': return "bg-red-50 text-red-800 border-red-200";
-                    default: return "bg-white text-slate-700 border-slate-200";
+                const statusInfo = StatusMap[status];
+                const color = statusInfo ? statusInfo.color : 'slate';
+
+                switch(color) {
+                    case 'orange': return "bg-orange-50 text-orange-800 border-orange-200";
+                    case 'blue': return "bg-blue-50 text-blue-800 border-blue-200";
+                    case 'yellow': return "bg-yellow-50 text-yellow-800 border-yellow-200";
+                    case 'green': return "bg-green-50 text-green-800 border-green-200";
+                    case 'red': return "bg-red-50 text-red-800 border-red-200";
+                    case 'slate': default: return "bg-slate-100 text-slate-500 border-slate-200";
                 }
             };
             
             // Logique de modification du statut via le Select
             const handleStatusChange = async (orderId, newStatus) => {
                 try {
-                    await updateDoc(doc(db, "orders", orderId), { status: newStatus });
+                    // Conservez la valeur "Generated" en arrière-plan si vous en avez besoin pour d'autres raisons (PDF ou autres)
+                    // Mais dans l'interface, nous utilisons "Envoyé".
+                    const finalStatus = newStatus === 'Envoyé' ? 'Envoyé' : newStatus;
+                    
+                    await updateDoc(doc(db, "orders", orderId), { status: finalStatus });
                 } catch(e) {
                     console.error("Erreur mise à jour statut:", e);
                     alert("Erreur lors de la mise à jour du statut.");
                 }
             };
 
-            // Logique de demande de suppression (Non-Admin)
             const submitDeleteRequest = async () => {
                 if (!deleteModal.reason.trim()) return alert("Veuillez entrer un motif de suppression.");
                 try {
@@ -675,13 +730,11 @@
                 }
             };
 
-            // Logique de Modification
             const handleEdit = (order) => {
                 setCurrentOrder(order);
                 setCurrentModule('generator');
             };
             
-            // Modale de demande de suppression (pour les non-admins)
             const DeleteConfirmationModal = () => {
                 if (!deleteModal) return null;
                 return React.createElement('div', { className: "modal-overlay" },
@@ -733,6 +786,7 @@
                                 React.createElement('thead', { className: "bg-slate-50 text-[10px] md:text-xs uppercase text-slate-500 font-bold tracking-wider" },
                                     React.createElement('tr', null,
                                         React.createElement('th', { className: "p-3" }, "Réf & Client"),
+                                        React.createElement('th', { className: "p-3 hidden md:table-cell" }, "Commercial"),
                                         React.createElement('th', { className: "p-3" }, "Statut"),
                                         React.createElement('th', { className: "p-3 hidden md:table-cell" }, "Date Création"),
                                         React.createElement('th', { className: "p-3 text-right" }, "Actions")
@@ -745,20 +799,24 @@
                                             React.createElement('div', { className: "text-slate-700 font-medium" }, o.companyName)
                                         ),
                                         
-                                        // --- COLONNE STATUT AVEC SELECTEUR (MOLETTE) ---
+                                        // --- COLONNE COMMERCIAL ---
+                                        React.createElement('td', { className: "p-3 hidden md:table-cell text-indigo-600 font-medium" },
+                                            salesRepsMap[o.salesRepId] || o.salesRepName || 'N/A'
+                                        ),
+                                        
+                                        // --- COLONNE STATUT AVEC SELECTEUR (Statuts simplifiés) ---
                                         React.createElement('td', { className: "p-3" },
                                             o.status === 'RequestDelete'
-                                            ? React.createElement('span', { className: "bg-red-100 text-red-800 text-[10px] px-2 py-1 rounded-full font-bold border border-red-200" }, "SUPPRESSION EN ATTENTE")
+                                            ? React.createElement('span', { className: "bg-red-100 text-red-800 text-[10px] px-2 py-1 rounded-full font-bold border border-red-200" }, StatusMap[o.status].label)
                                             : React.createElement('select', {
-                                                value: o.status,
+                                                value: o.status === 'Generated' ? 'Envoyé' : o.status,
                                                 onChange: (e) => handleStatusChange(o.id, e.target.value),
-                                                className: `text-[11px] font-bold rounded-lg block p-1.5 border outline-none cursor-pointer transition ${getStatusColorClass(o.status)}`
+                                                className: `text-[11px] font-bold rounded-lg block p-1.5 border outline-none cursor-pointer transition ${getStatusColorClass(o.status === 'Generated' ? 'Envoyé' : o.status)}`
                                             },
-                                                React.createElement('option', { value: "Pending" }, "En attente"),
-                                                React.createElement('option', { value: "Generated" }, "Généré"),
-                                                React.createElement('option', { value: "Reflection" }, "En Réflexion"),
-                                                React.createElement('option', { value: "Signed" }, "Signé"),
-                                                React.createElement('option', { value: "Abandoned" }, "Abandonné")
+                                                Object.keys(StatusMap).filter(k => k !== 'RequestDelete' && k !== 'Abandoned').map(key => (
+                                                    React.createElement('option', { key: key, value: key }, StatusMap[key].label)
+                                                )),
+                                                React.createElement('option', { value: "Abandoned" }, StatusMap.Abandoned.label)
                                             )
                                         ),
 
@@ -767,7 +825,7 @@
                                         ),
                                         React.createElement('td', { className: "p-3 text-right" },
                                             React.createElement('div', { className: "flex justify-end gap-2 flex-wrap" },
-                                            
+                                                
                                                 
                                                 // 1. Télécharger
                                                 React.createElement('button', { onClick: () => generateOrderPDF(o, globalSettings), className: "text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg transition", title: "Télécharger PDF" }, React.createElement(Icon, { name: "download", size: 16 })),
@@ -801,7 +859,7 @@
             );
         }
 
-        // --- MODULE GENERATEUR ---
+        // --- MODULE GENERATEUR (Correction du statut après modification) ---
 
         function FormPanel({ user, userData, globalSettings, db, isAdmin, setCurrentModule, currentOrder, setCurrentOrder, setShowSuccessModal }) {
             const [loading, setLoading] = useState(false);
@@ -968,9 +1026,10 @@
                         siren: isSiretPending ? "EN COURS" : form.siren,
                         reference: refString,
                         clientPhone: cleanPhone,
-                        ...(isNewOrder ? { createdAt: new Date() } : {}),
-                        // Force le statut à Pending ou conserve le statut actuel lors de l'édition si non Pending
-                        status: isNewOrder ? 'Pending' : (currentOrder.status === 'Pending' ? 'Pending' : 'Generated'), // Mieux de le mettre à 'Generated' si modification et non signé
+                        // Correction: Conserve le createdAt de l'ancienne commande si édition
+                        createdAt: isEditing ? currentOrder.createdAt : new Date(), 
+                        // Correction: Conserve le statut existant si édition, sinon 'Pending' (En attente)
+                        status: isEditing ? currentOrder.status : 'Pending', 
                         updatedAt: new Date()
                     };
 
@@ -986,7 +1045,10 @@
                     generateOrderPDF({...orderData, id: orderId}, globalSettings);
                     
                     // Affichage de la modale de succès
-                    setShowSuccessModal({ reference: refString, isEditing });
+                    setShowSuccessModal({ 
+                        reference: refString, 
+                        isEditing: isEditing // Passe le bon statut d'édition
+                    });
                     
                     // Réinitialisation du formulaire et changement de vue
                     setForm(initialFormState);
@@ -1102,23 +1164,22 @@
             );
         }
 
-        // --- NOUVEAU MODULE DE PROFIL (pour modification) ---
+        // --- MODULE DE PROFIL (Inchangé) ---
         function CommercialProfileModule({ user, userData, db }) {
+            // ... (Inchangé)
             const [firstName, setFirstName] = useState(userData?.firstName || '');
             const [lastName, setLastName] = useState(userData?.lastName || '');
             const [loading, setLoading] = useState(false);
             const [message, setMessage] = useState('');
-            const [isEditing, setIsEditing] = useState(false); // NOUVEL ÉTAT
+            const [isEditing, setIsEditing] = useState(false);
 
-            // Reset local state when user data changes (e.g., after successful save)
             useEffect(() => {
                 setFirstName(userData?.firstName || '');
                 setLastName(userData?.lastName || '');
-                setIsEditing(false); // Force back to static view on external data change (like initial load)
+                setIsEditing(false);
             }, [userData?.firstName, userData?.lastName]);
 
 
-            // Mise à jour de la photo de profil (réutilisée)
             const handlePhoto = async (e) => {
                 const file = e.target.files[0];
                 if(!file) return;
@@ -1216,7 +1277,7 @@
                                     React.createElement('p', { className: "font-medium text-slate-800" }, userData?.lastName || 'Non défini')
                                 )
                             ),
-                            // Bouton "Modifier"
+                            // Bouton "Modifier" qui active le mode édition
                             React.createElement('button', { onClick: () => setIsEditing(true), className: "w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition" }, "Modifier mes informations")
                         )
                     ) : (
@@ -1234,6 +1295,7 @@
                             ),
                             React.createElement('div', { className: "flex gap-3" },
                                 React.createElement('button', { type: "button", onClick: () => { setIsEditing(false); setFirstName(userData?.firstName || ''); setLastName(userData?.lastName || ''); }, className: "w-1/3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-lg transition" }, "Annuler"),
+                                // Bouton "Enregistrer" qui effectue la sauvegarde
                                 React.createElement('button', { type: "submit", disabled: loading, className: "w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition" }, loading ? "Sauvegarde..." : "Enregistrer les informations")
                             )
                         )
@@ -1245,8 +1307,9 @@
             );
         }
 
-        // --- ANCIEN MODULE PROFIL (Renommé pour plus de clarté) ---
+        // --- ANCIEN MODULE PROFIL (Inchangé) ---
         function StaticProfileModule({ user, userData, db }) {
+            // ... (Inchangé)
             return React.createElement('div', { className: "space-y-6" },
                 // Autres informations (rôle, ID)
                 React.createElement('div', { className: "bg-white rounded-xl shadow-sm border border-slate-200 p-8" },
@@ -1289,6 +1352,12 @@
             const [view, setView] = useState('dashboard');
             const [currentOrder, setCurrentOrder] = useState(null);
             const [allSalesReps, setAllSalesReps] = useState(null);
+            const [adminTab, setAdminTab] = useState('orders'); 
+
+            const setViewAndTab = (newView, newTab = 'orders') => {
+                setAdminTab(newTab);
+                setView(newView);
+            };
             
             const [globalSettings, setGlobalSettings] = useState({
                 defaultRate: 50,
@@ -1319,11 +1388,9 @@
                                 data = { ...data, ...docSnap.data() };
                             }
 
-                            // Définir le nom complet à partir de firstName et lastName si ils existent
                             if (data.firstName && data.lastName) {
                                 data.name = `${data.firstName} ${data.lastName}`;
                             } else if (data.name && data.name.includes(' ')) {
-                                // Tenter de séparer un ancien nom stocké pour remplir firstName/lastName
                                 const parts = data.name.split(' ');
                                 if(parts.length >= 2) {
                                     data.firstName = parts[0];
@@ -1331,11 +1398,9 @@
                                 }
                             }
                             
-                            // Logique Admin Principal par défaut si document utilisateur manquant
                             if (currentUser.email === "contact@cetn-solutions.fr" && data.role !== 'admin') {
                                 data = { ...data, role: 'admin', name: data.name || 'Administrateur Principal', firstName: 'Administrateur', lastName: 'Principal' };
                             } else if (!data.role) {
-                                // Default role if document is newly created or missing
                                 data = { ...data, role: 'sales', name: data.name || 'Commercial', firstName: 'Commercial', lastName: 'Partenaire' };
                             }
 
@@ -1349,6 +1414,7 @@
                                 setUser(currentUser);
                                 setUserData(data);
                             }
+                            // Important: On passe loading à false seulement après avoir traité l'état d'auth et récupéré les données utilisateur.
                             setLoading(false);
                         });
                     } else {
@@ -1383,7 +1449,8 @@
                     setAllSalesReps(null);
                 }
             }, [isAdmin]);
-
+            
+            // 4. Suppression de la logique de compteur global.
 
             if (loading) return React.createElement('div', { className: "min-h-screen flex items-center justify-center" }, React.createElement('div', { className: "loader h-8 w-8 rounded-full border-4 border-slate-200" }));
 
@@ -1392,11 +1459,13 @@
 
             if (view === 'admin' && isAdmin) {
                 return React.createElement(AdminPanel, {
-                    setView: () => setView('dashboard'),
+                    setView: () => setViewAndTab('dashboard', 'orders'),
                     globalSettings,
                     setGlobalSettings,
                     db,
-                    currentUser: user
+                    currentUser: user,
+                    defaultTab: adminTab,
+                    setAdminTab: setAdminTab
                 });
             }
 
@@ -1407,42 +1476,59 @@
                 globalSettings,
                 db,
                 isAdmin,
-                setView,
+                setView: setViewAndTab,
                 currentOrder,
                 setCurrentOrder,
                 allSalesReps
             });
         }
 
-        // --- ADMIN PANEL (MODIFIÉ) ---
-        function AdminPanel({ setView, globalSettings, setGlobalSettings, db, currentUser }) {
+        // --- ADMIN PANEL (Ajout de l'onglet Corbeille et affichage des demandes de suppression) ---
+        function AdminPanel({ setView, globalSettings, setGlobalSettings, db, currentUser, defaultTab, setAdminTab }) {
             const [orders, setOrders] = useState([]);
             const [users, setUsers] = useState([]);
             const [nameLogs, setNameLogs] = useState([]);
-            const [tab, setTab] = useState('orders');
+            const [tab, setTab] = useState(defaultTab || 'orders');
             
             // État pour la modification
             const [editingId, setEditingId] = useState(null);
             const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'sales' });
 
+            // Met à jour l'état local et global de l'onglet lors d'un clic
+            const handleTabChange = (newTab) => {
+                setTab(newTab);
+                setAdminTab(newTab);
+            }
+            
+            // Met à jour l'état local si defaultTab change (e.g. après un clic sur la corbeille)
             useEffect(() => {
-                const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(50));
+                if (defaultTab && defaultTab !== tab) {
+                    setTab(defaultTab);
+                }
+            }, [defaultTab]);
+
+
+            useEffect(() => {
+                // Charge toutes les commandes pour pouvoir filtrer localement les demandes de suppression
+                const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(100)); // Augmente la limite pour être sûr d'avoir les demandes récentes
                 const unsubOrders = onSnapshot(qOrders, (snap) => setOrders(snap.docs.map(d => ({id: d.id, ...d.data()}))));
                 
                 const qUsers = query(collection(db, "users"));
                 const unsubUsers = onSnapshot(qUsers, (snap) => setUsers(snap.docs.map(d => ({id: d.id, ...d.data()}))));
                 
-                // Récupération des logs de changement de nom
                 const qNameLogs = query(collection(db, "nameChanges"), orderBy("timestamp", "desc"));
                 const unsubNameLogs = onSnapshot(qNameLogs, (snap) => setNameLogs(snap.docs.map(d => ({id: d.id, ...d.data()}))));
 
                 return () => { unsubOrders(); unsubUsers(); unsubNameLogs(); };
             }, []);
 
+            // Commandes à afficher
+            const allOrders = orders;
+            const trashOrders = orders.filter(o => o.status === 'RequestDelete');
+            
             const handleSaveUser = async (e) => {
                 e.preventDefault();
                 
-                // MODE MODIFICATION
                 if (editingId) {
                     try {
                         const userRef = doc(db, "users", editingId);
@@ -1464,7 +1550,6 @@
                     return;
                 }
 
-                // MODE CREATION
                 try {
                     const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newUser.email, newUser.password);
                     await setDoc(doc(db, "users", userCredential.user.uid), {
@@ -1501,9 +1586,9 @@
                 }
             };
             
-            // NOUVELLE FONCTION : Supprimer un seul log
+            // Supprimer un seul log (gardé ici, même si l'onglet est renommé)
             const deleteNameLog = async (logId) => {
-                 if (!confirm("Êtes-vous sûr de vouloir supprimer ce log d'historique ?")) return;
+                 if (!confirm("Êtes-vous sûr de vouloir supprimer ce log d'historique de nom ?")) return;
                  try {
                      await deleteDoc(doc(db, "nameChanges", logId));
                      alert("Log supprimé.");
@@ -1531,9 +1616,9 @@
                         alert("Commande supprimée par l'administrateur.");
                     }
                 } else {
-                    if (confirm("Voulez-vous REJETER la demande de suppression et remettre le statut à 'Généré' ?")) {
-                        await updateDoc(doc(db, "orders", orderId), { status: 'Generated', deleteReason: deleteOrder.deleteReason = null });
-                        alert("Demande rejetée, statut remis à 'Généré'.");
+                    if (confirm("Voulez-vous REJETER la demande de suppression et remettre le statut à 'Envoyé' ?")) {
+                        await updateDoc(doc(db, "orders", orderId), { status: 'Envoyé', deleteReason: deleteOrder.deleteReason = null });
+                        alert("Demande rejetée, statut remis à 'Envoyé'.");
                     }
                 }
             };
@@ -1543,23 +1628,35 @@
 
             const getUniqueClients = () => {
                 const unique = {};
-                orders.forEach(o => { if(!unique[o.siren] && o.companyName) unique[o.siren] = o; });
+                allOrders.forEach(o => { if(!unique[o.siren] && o.companyName) unique[o.siren] = o; });
                 return Object.values(unique);
             };
             
+            // Utilise la Map StatusMap pour les labels
             const getStatusBadge = (status) => {
-                switch(status) {
-                    case 'Pending': return React.createElement('span', { className: "bg-orange-100 text-orange-800 text-[10px] px-2 py-1 rounded-full font-bold" }, "EN ATTENTE");
-                    case 'Signed': return React.createElement('span', { className: "bg-green-100 text-green-800 text-[10px] px-2 py-1 rounded-full font-bold" }, "SIGNÉ");
-                    case 'Reflection': return React.createElement('span', { className: "bg-yellow-100 text-yellow-800 text-[10px] px-2 py-1 rounded-full font-bold" }, "RÉFLEXION");
-                    case 'Generated': return React.createElement('span', { className: "bg-blue-100 text-blue-800 text-[10px] px-2 py-1 rounded-full font-bold" }, "GÉNÉRÉ");
-                    case 'RequestDelete': return React.createElement('span', { className: "bg-red-100 text-red-800 text-[10px] px-2 py-1 rounded-full font-bold" }, "DEMANDE SUPPR.");
-                    case 'Abandoned': return React.createElement('span', { className: "bg-slate-100 text-slate-500 text-[10px] px-2 py-1 rounded-full font-bold" }, "ABANDONNÉ");
-                    default: return React.createElement('span', { className: "bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded-full font-bold" }, "INCONNU");
+                const statusInfo = StatusMap[status];
+                if (!statusInfo) return React.createElement('span', { className: "bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded-full font-bold" }, "INCONNU");
+                
+                const colorClass = getStatusColorClass(status);
+
+                return React.createElement('span', { className: `${colorClass.replace('-50', '-100')} text-[10px] px-2 py-1 rounded-full font-bold` }, statusInfo.label.toUpperCase());
+            };
+            
+            // Utilise la Map StatusMap pour les couleurs
+            const getStatusColorClass = (status) => {
+                const statusInfo = StatusMap[status];
+                const color = statusInfo ? statusInfo.color : 'slate';
+
+                switch(color) {
+                    case 'orange': return "bg-orange-50 text-orange-800 border-orange-200";
+                    case 'blue': return "bg-blue-50 text-blue-800 border-blue-200";
+                    case 'yellow': return "bg-yellow-50 text-yellow-800 border-yellow-200";
+                    case 'green': return "bg-green-50 text-green-800 border-green-200";
+                    case 'red': return "bg-red-50 text-red-800 border-red-200";
+                    case 'slate': default: return "bg-slate-100 text-slate-500 border-slate-200";
                 }
             };
             
-            // NOUVELLE FONCTION: Supprimer tous les logs
             const deleteAllNameLogs = async () => {
                 if (nameLogs.length === 0) return alert("Aucun log à supprimer.");
                 if (!confirm(`Êtes-vous sûr de vouloir supprimer les ${nameLogs.length} logs d'historique de changement de nom ?`)) return;
@@ -1583,16 +1680,20 @@
                     React.createElement('div', { className: "flex justify-between items-center mb-8" },
                         React.createElement('button', { onClick: () => setView('dashboard'), className: "text-slate-400 hover:text-white flex items-center gap-2" }, "← Retour App"),
                         React.createElement('div', { className: "flex bg-slate-800 rounded-lg p-1" },
-                            ['orders', 'team', 'clients', 'nameLogs', 'settings'].map(t =>
-                                React.createElement('button', { key: t, onClick: () => setTab(t), className: `px-4 py-2 rounded text-sm ${tab === t ? 'bg-blue-600 text-white' : 'text-slate-400'}` },
-                                    t === 'orders' ? 'Commandes' : t === 'team' ? 'Gestion Équipe' : t === 'clients' ? 'Clients' : t === 'nameLogs' ? React.createElement('span', { className: "flex items-center gap-1" }, React.createElement(Icon, { name: "bell", size: 16 }), 'Logs Nom') : 'Config')
+                            ['orders', 'trash', 'history', 'team', 'clients', 'settings'].map(t =>
+                                React.createElement('button', { 
+                                    key: t, 
+                                    onClick: () => handleTabChange(t), 
+                                    className: `px-4 py-2 rounded text-sm ${tab === t ? 'bg-blue-600 text-white' : 'text-slate-400'}` 
+                                },
+                                    t === 'orders' ? 'Commandes' : t === 'team' ? 'Gestion Équipe' : t === 'clients' ? 'Clients' : t === 'trash' ? React.createElement('span', { className: "flex items-center gap-1" }, React.createElement(Icon, { name: "trash", size: 16 }), 'Corbeille') : t === 'history' ? React.createElement('span', { className: "flex items-center gap-1" }, React.createElement(Icon, { name: "bell", size: 16 }), 'Historique Nom') : 'Config')
                             )
                         )
                     ),
 
                     // TAB TEAM (Inchangé)
                     tab === 'team' && React.createElement('div', { className: "space-y-8" },
-                        // Formulaire d'ajout / modification
+                        // ... (Contenu inchangé)
                         React.createElement('div', { className: `p-6 rounded-xl border ${editingId ? 'bg-blue-900 border-blue-700' : 'bg-slate-800 border-slate-700'}` },
                             React.createElement('div', { className: "flex justify-between items-center mb-4" },
                                 React.createElement('h3', { className: "text-white font-bold flex items-center gap-2" },
@@ -1689,55 +1790,95 @@
                         )
                     ),
 
-                    // TAB ORDERS (Inchangé)
-                    tab === 'orders' && React.createElement('div', { className: "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" },
-                        React.createElement('div', { className: "overflow-x-auto" },
-                            React.createElement('table', { className: "w-full text-left" },
-                                React.createElement('thead', { className: "bg-slate-50 text-[10px] md:text-xs uppercase text-slate-500 font-bold tracking-wider" },
-                                    React.createElement('tr', null,
-                                        React.createElement('th', { className: "p-2 md:p-3" }, "Réf"),
-                                        React.createElement('th', { className: "p-2 md:p-3" }, "Client"),
-                                        React.createElement('th', { className: "p-2 md:p-3" }, "Statut"),
-                                        React.createElement('th', { className: "p-2 md:p-3 hidden lg:table-cell" }, "Créé par"),
-                                        React.createElement('th', { className: "p-2 md:p-3 text-right" }, "Actions")
-                                    )
-                                ),
-                                React.createElement('tbody', { className: "text-xs md:text-sm divide-y divide-slate-100" },
-                                    orders.map(o => React.createElement('tr', { key: o.id, className: `hover:bg-slate-50 transition-colors ${o.status === 'RequestDelete' ? 'bg-red-50/50 hover:bg-red-100/50' : ''}` },
-                                        React.createElement('td', { className: "p-2 md:p-3 font-mono font-bold text-blue-600 whitespace-nowrap" },
-                                            o.reference
-                                        ),
-                                        React.createElement('td', { className: "p-2 md:p-3 font-medium text-slate-700 truncate max-w-[100px] md:max-w-xs" },
-                                            o.companyName
-                                        ),
-                                        React.createElement('td', { className: "p-2 md:p-3" },
-                                            getStatusBadge(o.status),
-                                            o.status === 'RequestDelete' && React.createElement('div', { className: "text-[10px] text-red-600 truncate max-w-[100px] md:max-w-none mt-1" }, `Motif: ${o.deleteReason || 'N/A'}`)
-                                        ),
-                                        React.createElement('td', { className: "p-2 md:p-3 hidden lg:table-cell font-medium text-indigo-600 truncate max-w-[150px]" },
-                                            o.salesRepName
-                                        ),
-                                        React.createElement('td', { className: "p-2 md:p-3 text-right" },
-                                            o.status !== 'RequestDelete'
-                                            ? React.createElement('div', { className: "flex justify-end gap-1 md:gap-2" },
-                                                React.createElement('button', { onClick: () => redownloadPDF(o), className: "text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 md:p-2 rounded-lg transition" }, React.createElement(Icon, { name: "download", size: 16 })),
-                                                React.createElement('button', { onClick: () => deleteOrder(o.id), className: "text-red-600 bg-red-50 hover:bg-red-100 p-1.5 md:p-2 rounded-lg transition", title: "Suppression Immédiate" }, React.createElement(Icon, { name: "trash", size: 16 }))
-                                            )
-                                            : React.createElement('div', { className: "flex justify-end gap-1 md:gap-2" },
-                                                React.createElement('button', { onClick: () => handleDeletionApproval(o.id, true), className: "text-green-600 bg-green-50 hover:bg-green-100 p-1.5 md:p-2 rounded-lg transition", title: "Approuver Suppression" }, React.createElement(Icon, { name: "check", size: 16 })),
-                                                React.createElement('button', { onClick: () => handleDeletionApproval(o.id, false), className: "text-slate-600 bg-slate-100 hover:bg-slate-200 p-1.5 md:p-2 rounded-lg transition", title: "Rejeter la demande" }, React.createElement(Icon, { name: "x", size: 16 }))
-                                            )
+                    // TAB CORBEILLE (Demandes de suppression de commande)
+                    tab === 'trash' && React.createElement('div', { className: "space-y-6" },
+                        React.createElement('h2', { className: "text-2xl font-bold text-red-400 mb-4" }, "Corbeille (Demandes de suppression)"),
+                        trashOrders.length === 0
+                        ? React.createElement('p', { className: "text-slate-400 bg-slate-800 p-6 rounded-xl" }, "Aucune demande de suppression en attente.")
+                        : React.createElement('div', { className: "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" },
+                            React.createElement('div', { className: "overflow-x-auto" },
+                                React.createElement('table', { className: "w-full text-left" },
+                                    React.createElement('thead', { className: "bg-red-100 text-[10px] md:text-xs uppercase text-red-800 font-bold tracking-wider" },
+                                        React.createElement('tr', null,
+                                            React.createElement('th', { className: "p-3" }, "Réf"),
+                                            React.createElement('th', { className: "p-3" }, "Client"),
+                                            React.createElement('th', { className: "p-3" }, "Demandeur"),
+                                            React.createElement('th', { className: "p-3 hidden lg:table-cell" }, "Motif"),
+                                            React.createElement('th', { className: "p-3 text-right" }, "Actions")
                                         )
-                                    ))
+                                    ),
+                                    React.createElement('tbody', { className: "text-xs md:text-sm divide-y divide-slate-100" },
+                                        trashOrders.map(o => React.createElement('tr', { key: o.id, className: `hover:bg-red-50/50 transition-colors` },
+                                            React.createElement('td', { className: "p-3 font-mono font-bold text-red-600 whitespace-nowrap" }, o.reference),
+                                            React.createElement('td', { className: "p-3 font-medium text-slate-700 truncate max-w-[100px] md:max-w-xs" }, o.companyName),
+                                            React.createElement('td', { className: "p-3 font-medium text-indigo-600" }, o.salesRepName),
+                                            React.createElement('td', { className: "p-3 hidden lg:table-cell text-slate-500 text-xs italic" }, o.deleteReason || 'Aucun motif fourni.'),
+                                            React.createElement('td', { className: "p-3 text-right" },
+                                                React.createElement('div', { className: "flex justify-end gap-1 md:gap-2" },
+                                                    React.createElement('button', { onClick: () => handleDeletionApproval(o.id, true), className: "text-white bg-green-600 hover:bg-green-700 p-1.5 md:p-2 rounded-lg transition", title: "Approuver Suppression" }, React.createElement(Icon, { name: "check", size: 16 })),
+                                                    React.createElement('button', { onClick: () => handleDeletionApproval(o.id, false), className: "text-slate-600 bg-slate-100 hover:bg-slate-200 p-1.5 md:p-2 rounded-lg transition", title: "Rejeter la demande" }, React.createElement(Icon, { name: "x", size: 16 }))
+                                                )
+                                            )
+                                        ))
+                                    )
                                 )
                             )
                         )
                     ),
                     
-                    // NOUVEAU TAB NAME LOGS (Avec suppression unitaire)
-                    tab === 'nameLogs' && React.createElement('div', { className: "space-y-6" },
-                        // Bouton de suppression des logs
-                        React.createElement('div', { className: "flex justify-between items-center bg-red-900/50 p-4 rounded-xl border border-red-900" },
+                    // TAB ORDERS (Inchangé, mais affichage de la section Log Nom retiré)
+                    tab === 'orders' && React.createElement('div', { className: "space-y-8" },
+                        React.createElement('div', { className: "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" },
+                            React.createElement('div', { className: "p-4 border-b border-slate-100 bg-slate-50" },
+                                React.createElement('h3', { className: "font-bold text-slate-800" }, "Toutes les commandes (100 dernières)")
+                            ),
+                            React.createElement('div', { className: "overflow-x-auto" },
+                                React.createElement('table', { className: "w-full text-left" },
+                                    React.createElement('thead', { className: "bg-slate-50 text-[10px] md:text-xs uppercase text-slate-500 font-bold tracking-wider" },
+                                        React.createElement('tr', null,
+                                            React.createElement('th', { className: "p-2 md:p-3" }, "Réf"),
+                                            React.createElement('th', { className: "p-2 md:p-3" }, "Client"),
+                                            React.createElement('th', { className: "p-2 md:p-3" }, "Statut"),
+                                            React.createElement('th', { className: "p-2 md:p-3 hidden lg:table-cell" }, "Créé par"),
+                                            React.createElement('th', { className: "p-2 md:p-3 text-right" }, "Actions")
+                                        )
+                                    ),
+                                    React.createElement('tbody', { className: "text-xs md:text-sm divide-y divide-slate-100" },
+                                        allOrders.map(o => React.createElement('tr', { key: o.id, className: `hover:bg-slate-50 transition-colors ${o.status === 'RequestDelete' ? 'bg-red-50/50 hover:bg-red-100/50' : ''}` },
+                                            React.createElement('td', { className: "p-2 md:p-3 font-mono font-bold text-blue-600 whitespace-nowrap" },
+                                                o.reference
+                                            ),
+                                            React.createElement('td', { className: "p-2 md:p-3 font-medium text-slate-700 truncate max-w-[100px] md:max-w-xs" },
+                                                o.companyName
+                                            ),
+                                            React.createElement('td', { className: "p-2 md:p-3" },
+                                                getStatusBadge(o.status === 'Generated' ? 'Envoyé' : o.status),
+                                                o.status === 'RequestDelete' && React.createElement('div', { className: "text-[10px] text-red-600 truncate max-w-[100px] md:max-w-none mt-1" }, `Motif: ${o.deleteReason || 'N/A'}`)
+                                            ),
+                                            React.createElement('td', { className: "p-2 md:p-3 hidden lg:table-cell font-medium text-indigo-600 truncate max-w-[150px]" },
+                                                o.salesRepName
+                                            ),
+                                            React.createElement('td', { className: "p-2 md:p-3 text-right" },
+                                                o.status !== 'RequestDelete'
+                                                ? React.createElement('div', { className: "flex justify-end gap-1 md:gap-2" },
+                                                    React.createElement('button', { onClick: () => redownloadPDF(o), className: "text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 md:p-2 rounded-lg transition", title: "Télécharger PDF" }, React.createElement(Icon, { name: "download", size: 16 })),
+                                                    React.createElement('button', { onClick: () => deleteOrder(o.id), className: "text-red-600 bg-red-50 hover:bg-red-100 p-1.5 md:p-2 rounded-lg transition", title: "Suppression Immédiate" }, React.createElement(Icon, { name: "trash", size: 16 }))
+                                                )
+                                                : React.createElement('div', { className: "text-xs font-bold text-red-600" }, "En attente d'approbation")
+                                            )
+                                        ))
+                                    )
+                                )
+                            )
+                        ),
+                        
+                        // LOGS DE NOM (Maintenant dans un onglet séparé 'history')
+                    ),
+
+                    // NOUVEAU TAB HISTORIQUE NOM
+                    tab === 'history' && React.createElement('div', { className: "space-y-6" },
+                        React.createElement('h2', { className: "text-2xl font-bold text-slate-800 mb-4" }, "Historique des changements de nom"),
+                        React.createElement('div', { className: "flex justify-between items-center bg-slate-800/80 p-4 rounded-xl border border-slate-700" },
                             React.createElement('p', { className: "text-white text-sm" }, `Total des logs : ${nameLogs.length}`),
                             React.createElement('button', { 
                                 onClick: deleteAllNameLogs,
@@ -1746,10 +1887,9 @@
                             }, React.createElement(Icon, { name: "trash", size: 16 }), "Supprimer tout l'historique"),
                         ),
 
-                        // Tableau des logs
                         React.createElement('div', { className: "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" },
-                            React.createElement('div', { className: "p-4 border-b border-slate-100 bg-red-50" },
-                                React.createElement('h3', { className: "font-bold text-red-800 flex items-center gap-2" }, React.createElement(Icon, { name: "bell", size: 20 }), "LOGS DE CHANGEMENT DE NOM/PRÉNOM")
+                            React.createElement('div', { className: "p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center" },
+                                React.createElement('h3', { className: "font-bold text-slate-800" }, "Logs individuels")
                             ),
                             React.createElement('div', { className: "overflow-x-auto" },
                                 React.createElement('table', { className: "w-full text-left" },
@@ -1759,7 +1899,7 @@
                                             React.createElement('th', { className: "p-3" }, "Utilisateur"),
                                             React.createElement('th', { className: "p-3" }, "Ancien Nom"),
                                             React.createElement('th', { className: "p-3" }, "Nouveau Nom"),
-                                            React.createElement('th', { className: "p-3 text-right" }, "Action") // Nouvelle colonne
+                                            React.createElement('th', { className: "p-3 text-right" }, "Action")
                                         )
                                     ),
                                     React.createElement('tbody', { className: "text-xs md:text-sm divide-y divide-slate-100" },
@@ -1781,6 +1921,7 @@
                             )
                         )
                     ),
+
 
                     // TAB CLIENTS (Inchangé)
                     tab === 'clients' && React.createElement('div', { className: "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" },
