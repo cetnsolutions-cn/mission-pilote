@@ -1380,47 +1380,53 @@
                 const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
                     if (currentUser) {
                         const userRef = doc(db, "users", currentUser.uid);
-                        const unsubDoc = onSnapshot(userRef, (docSnap) => {
-                            let data = {
-                                firstName: '',
-                                lastName: '',
-                                name: 'Commercial',
-                                role: 'sales'
-                            };
+  const unsubDoc = onSnapshot(userRef, (docSnap) => {
+    // CORRECTION : On vérifie d'abord si le compte existe vraiment dans la base de données
+    if (docSnap.exists()) {
+        let data = {
+            firstName: '',
+            lastName: '',
+            name: 'Commercial', // Valeur par défaut seulement si le doc existe mais est incomplet
+            role: 'sales',
+            ...docSnap.data()
+        };
 
-                            if (docSnap.exists()) {
-                                data = { ...data, ...docSnap.data() };
-                            }
+        // Logique de nom (inchangée)
+        if (data.firstName && data.lastName) {
+            data.name = `${data.firstName} ${data.lastName}`;
+        } else if (data.name && data.name.includes(' ')) {
+            const parts = data.name.split(' ');
+            if(parts.length >= 2) {
+                data.firstName = parts[0];
+                data.lastName = parts.slice(1).join(' ');
+            }
+        }
+        
+        // Logique Admin (inchangée)
+        if (currentUser.email === "contact@cetn-solutions.fr" && data.role !== 'admin') {
+            data = { ...data, role: 'admin', name: data.name || 'Administrateur Principal', firstName: 'Administrateur', lastName: 'Principal' };
+        } else if (!data.role) {
+            data = { ...data, role: 'sales', name: data.name || 'Commercial', firstName: 'Commercial', lastName: 'Partenaire' };
+        }
 
-                            if (data.firstName && data.lastName) {
-                                data.name = `${data.firstName} ${data.lastName}`;
-                            } else if (data.name && data.name.includes(' ')) {
-                                const parts = data.name.split(' ');
-                                if(parts.length >= 2) {
-                                    data.firstName = parts[0];
-                                    data.lastName = parts.slice(1).join(' ');
-                                }
-                            }
-                            
-                            if (currentUser.email === "contact@cetn-solutions.fr" && data.role !== 'admin') {
-                                data = { ...data, role: 'admin', name: data.name || 'Administrateur Principal', firstName: 'Administrateur', lastName: 'Principal' };
-                            } else if (!data.role) {
-                                data = { ...data, role: 'sales', name: data.name || 'Commercial', firstName: 'Commercial', lastName: 'Partenaire' };
-                            }
-
-
-                            if (data.isBlocked) {
-                                signOut(auth);
-                                alert("Votre accès a été suspendu. Contactez l'administrateur.");
-                                setUser(null);
-                                setUserData(null);
-                            } else {
-                                setUser(currentUser);
-                                setUserData(data);
-                            }
-                            // Important: On passe loading à false seulement après avoir traité l'état d'auth et récupéré les données utilisateur.
-                            setLoading(false);
-                        });
+        // Vérification blocage
+        if (data.isBlocked) {
+            signOut(auth);
+            alert("Votre accès a été suspendu. Contactez l'administrateur.");
+            setUser(null);
+            setUserData(null);
+        } else {
+            setUser(currentUser);
+            setUserData(data);
+        }
+    } else {
+        // C'EST ICI LA SOLUTION : Si le compte n'existe pas dans la base de données, on déconnecte !
+        signOut(auth);
+        setUser(null);
+        setUserData(null);
+    }
+    setLoading(false);
+});
                     } else {
                         setUser(null);
                         setUserData(null);
